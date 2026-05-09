@@ -1,0 +1,23 @@
+{
+  "name": "talaba-mobile",
+  "version": "1.0.0",
+  "description": "Talabalar uchun kun rejalashtiruvchi - Android app",
+  "main": "index.js",
+  "scripts": {
+    "icons":    "node generate-icons.js",
+    "sync":     "npx cap sync android",
+    "open":     "npx cap open android",
+    "build":    "npm run icons && npm run sync",
+    "copy-web": "npx cap copy android"
+  },
+  "keywords": ["talaba", "student", "planner", "android"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.3.3",
+    "@capacitor/cli": "^8.3.3",
+    "@capacitor/core": "^8.3.3",
+    "canvas": "^3.2.3"
+  }
+}

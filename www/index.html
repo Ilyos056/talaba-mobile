@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="uz" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#6C63FF" />
+  <meta name="description" content="Talabalar uchun kun rejalashtiruvchi ilova" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Talaba Rejasi" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>Talaba Rejasi</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Capacitor (faqat native app ichida ishlaydi) -->
+  <script>
+    if (window.Capacitor) {
+      document.documentElement.classList.add('is-native');
+    }
+  </script>
+</head>
+<body>
+
+<!-- ===== APP SHELL ===== -->
+<div id="app">
+
+  <!-- Header -->
+  <header class="app-header" id="appHeader">
+    <div class="header-left">
+      <div class="app-logo">📚</div>
+      <div>
+        <h1 class="app-title">Talaba Rejasi</h1>
+        <p class="app-date" id="headerDate"></p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="live-clock" id="liveClock"></div>
+      <button class="icon-btn" id="themeBtn" title="Mavzu">🌙</button>
+      <button class="icon-btn" id="settingsBtn" title="Sozlamalar">⚙️</button>
+    </div>
+  </header>
+
+  <!-- Pages Container -->
+  <main class="pages-container">
+
+    <!-- ===== PAGE: BUGUN (TODAY) ===== -->
+    <div class="page active" id="page-today">
+      <div class="page-inner">
+        <!-- Day progress -->
+        <div class="card progress-card">
+          <div class="progress-header">
+            <div>
+              <h2 id="todayGreeting">Xayrli kun!</h2>
+              <p class="text-secondary" id="todaySubtitle"></p>
+            </div>
+            <div class="progress-circle" id="dayProgressCircle">
+              <svg viewBox="0 0 36 36">
+                <circle class="circle-bg" cx="18" cy="18" r="15.9" />
+                <circle class="circle-fill" id="circleProgress" cx="18" cy="18" r="15.9"
+                  stroke-dasharray="0 100" />
+              </svg>
+              <span class="progress-pct" id="dayProgressPct">0%</span>
+            </div>
+          </div>
+          <div class="day-stats-row">
+            <div class="day-stat"><span id="statClasses">0</span><small>Dars</small></div>
+            <div class="day-stat"><span id="statTasks">0</span><small>Vazifa</small></div>
+            <div class="day-stat"><span id="statDone">0</span><small>Bajarildi</small></div>
+            <div class="day-stat"><span id="statPomodoros">0</span><small>Pomodoro</small></div>
+          </div>
+        </div>
+
+        <!-- Today's Timeline -->
+        <div class="section-header">
+          <h3>Bugungi jadval</h3>
+          <button class="add-btn" onclick="App.openModal('class')">+ Dars</button>
+        </div>
+        <div id="todayTimeline" class="timeline-container">
+          <div class="empty-state">
+            <span>📅</span>
+            <p>Bugun dars yo'q</p>
+            <button class="btn btn-outline" onclick="App.openModal('class')">Dars qo'shish</button>
+          </div>
+        </div>
+
+        <!-- Today's Tasks -->
+        <div class="section-header">
+          <h3>Bugungi vazifalar</h3>
+          <button class="add-btn" onclick="App.openModal('task')">+ Vazifa</button>
+        </div>
+        <div id="todayTasks" class="tasks-list">
+          <div class="empty-state">
+            <span>✅</span>
+            <p>Bugun vazifa yo'q</p>
+            <button class="btn btn-outline" onclick="App.openModal('task')">Vazifa qo'shish</button>
+          </div>
+        </div>
+
+        <!-- Free Time Suggestions -->
+        <div id="freeTimeSuggestions" class="free-time-section" style="display:none">
+          <div class="section-header"><h3>Bo'sh vaqtlar</h3></div>
+          <div id="freeTimeList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: ERTAGA (TOMORROW) ===== -->
+    <div class="page" id="page-tomorrow">
+      <div class="page-inner">
+        <div class="card plan-header-card">
+          <h2 id="tomorrowTitle">Ertangi reja</h2>
+          <p class="text-secondary" id="tomorrowDate"></p>
+        </div>
+
+        <div class="section-header">
+          <h3>Ertangi darslar</h3>
+          <button class="add-btn" onclick="App.openModal('class')">+ Dars</button>
+        </div>
+        <div id="tomorrowClasses" class="timeline-container">
+          <div class="empty-state"><span>📅</span><p>Ertaga dars yo'q</p></div>
+        </div>
+
+        <div class="section-header">
+          <h3>Ertanga vazifalar</h3>
+          <button class="add-btn" onclick="App.openModal('task')">+ Vazifa</button>
+        </div>
+        <div id="tomorrowTasks" class="tasks-list">
+          <div class="empty-state"><span>📋</span><p>Ertaga uchun vazifa yo'q</p></div>
+        </div>
+
+        <!-- Auto schedule suggestion -->
+        <div id="autoScheduleSection" class="card auto-schedule-card" style="display:none">
+          <h3>🤖 Avtomatik taqsimot</h3>
+          <p class="text-secondary">Darslar orasidagi bo'sh vaqtlarga tavsiyalar:</p>
+          <div id="autoScheduleList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: HAFTA (WEEK) ===== -->
+    <div class="page" id="page-week">
+      <div class="page-inner">
+        <div class="week-nav">
+          <button class="icon-btn" onclick="App.weekOffset--; App.renderWeek()">‹</button>
+          <h3 id="weekTitle">Bu hafta</h3>
+          <button class="icon-btn" onclick="App.weekOffset++; App.renderWeek()">›</button>
+        </div>
+        <div class="week-grid" id="weekGrid"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: FANLAR (SUBJECTS) ===== -->
+    <div class="page" id="page-subjects">
+      <div class="page-inner">
+        <div class="section-header">
+          <h3>Fanlar</h3>
+          <button class="add-btn" onclick="App.openModal('subject')">+ Fan</button>
+        </div>
+        <div id="subjectsList" class="subjects-grid"></div>
+
+        <div class="section-header" style="margin-top:24px">
+          <h3>Barcha vazifalar</h3>
+          <div class="filter-row">
+            <select id="taskFilterSubject" class="filter-select" onchange="App.renderSubjectsPage()">
+              <option value="">Barchasi</option>
+            </select>
+            <select id="taskFilterStatus" class="filter-select" onchange="App.renderSubjectsPage()">
+              <option value="">Holat</option>
+              <option value="active">Faol</option>
+              <option value="done">Bajarilgan</option>
+            </select>
+          </div>
+        </div>
+        <div class="search-bar">
+          <span>🔍</span>
+          <input type="text" id="taskSearch" placeholder="Vazifa qidirish..." oninput="App.renderSubjectsPage()" />
+        </div>
+        <div id="allTasksList" class="tasks-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: POMODORO ===== -->
+    <div class="page" id="page-pomodoro">
+      <div class="page-inner">
+        <div class="card pomodoro-card">
+          <div class="pomodoro-mode-tabs">
+            <button class="mode-tab active" data-mode="work" onclick="App.setPomodoroMode('work')">Ishlash</button>
+            <button class="mode-tab" data-mode="break" onclick="App.setPomodoroMode('break')">Dam olish</button>
+            <button class="mode-tab" data-mode="long" onclick="App.setPomodoroMode('long')">Uzun tanaffus</button>
+          </div>
+
+          <div class="pomodoro-timer-display">
+            <svg class="timer-ring" viewBox="0 0 200 200">
+              <circle class="ring-bg" cx="100" cy="100" r="90" />
+              <circle class="ring-fill" id="timerRing" cx="100" cy="100" r="90"
+                stroke-dasharray="565.49 565.49" stroke-dashoffset="0" />
+            </svg>
+            <div class="timer-center">
+              <div class="timer-display" id="timerDisplay">25:00</div>
+              <div class="timer-label" id="timerLabel">Ishlash vaqti</div>
+            </div>
+          </div>
+
+          <div class="pomodoro-controls">
+            <button class="btn btn-outline" onclick="App.resetPomodoro()">↺</button>
+            <button class="btn btn-primary btn-large" id="pomodoroStartBtn" onclick="App.togglePomodoro()">▶ Boshlash</button>
+            <button class="btn btn-outline" onclick="App.skipPomodoro()">⏭</button>
+          </div>
+
+          <div class="pomodoro-subject">
+            <label>Fan tanlang:</label>
+            <select id="pomodoroSubject" class="filter-select"></select>
+          </div>
+
+          <div class="pomodoro-session-counter">
+            <div id="sessionDots" class="session-dots"></div>
+            <p class="text-secondary" id="sessionCount">0 / 4 sessiya</p>
+          </div>
+        </div>
+
+        <div class="section-header"><h3>Bugungi sessiyalar</h3></div>
+        <div id="pomodoroHistory" class="pomodoro-history"></div>
+
+        <div class="card pomodoro-settings-card">
+          <h3>⚙️ Sozlamalar</h3>
+          <div class="settings-row">
+            <label>Ishlash vaqti (daqiqa)</label>
+            <input type="number" id="settingWork" min="1" max="60" class="number-input" onchange="App.updatePomodoroSettings()" />
+          </div>
+          <div class="settings-row">
+            <label>Dam olish vaqti</label>
+            <input type="number" id="settingBreak" min="1" max="30" class="number-input" onchange="App.updatePomodoroSettings()" />
+          </div>
+          <div class="settings-row">
+            <label>Uzun tanaffus</label>
+            <input type="number" id="settingLong" min="5" max="60" class="number-input" onchange="App.updatePomodoroSettings()" />
+          </div>
+          <div class="settings-row">
+            <label>Haftalik maqsad (pomodoro)</label>
+            <input type="number" id="settingGoal" min="1" max="100" class="number-input" onchange="App.updatePomodoroSettings()" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: IMTIHONLAR (EXAMS) ===== -->
+    <div class="page" id="page-exams">
+      <div class="page-inner">
+        <div class="section-header">
+          <h3>Imtihonlar</h3>
+          <button class="add-btn" onclick="App.openModal('exam')">+ Imtihon</button>
+        </div>
+        <div id="examsList" class="exams-list">
+          <div class="empty-state"><span>📝</span><p>Imtihon qo'shilmagan</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: STATISTIKA (STATS) ===== -->
+    <div class="page" id="page-stats">
+      <div class="page-inner">
+        <!-- Summary cards -->
+        <div class="stats-summary">
+          <div class="stat-card"><div class="stat-num" id="statTotalTasks">0</div><div class="stat-label">Jami vazifa</div></div>
+          <div class="stat-card"><div class="stat-num" id="statCompletedTasks">0</div><div class="stat-label">Bajarildi</div></div>
+          <div class="stat-card"><div class="stat-num" id="statTotalPomodoros">0</div><div class="stat-label">Pomodoro</div></div>
+          <div class="stat-card"><div class="stat-num" id="statStudyHours">0</div><div class="stat-label">Soat o'qildi</div></div>
+        </div>
+
+        <!-- Weekly progress -->
+        <div class="card chart-card">
+          <h3>Haftalik Pomodoro</h3>
+          <canvas id="weeklyChart" height="200"></canvas>
+        </div>
+
+        <!-- Subject distribution -->
+        <div class="card chart-card">
+          <h3>Fanlar bo'yicha o'qish</h3>
+          <canvas id="subjectChart" height="200"></canvas>
+        </div>
+
+        <!-- Task completion -->
+        <div class="card chart-card">
+          <h3>Vazifalar bajarilishi (7 kun)</h3>
+          <canvas id="taskChart" height="200"></canvas>
+        </div>
+
+        <!-- Weekly goal -->
+        <div class="card">
+          <div class="goal-row">
+            <div>
+              <h3>Haftalik maqsad</h3>
+              <p class="text-secondary" id="goalSubtitle"></p>
+            </div>
+            <div class="goal-pct" id="goalPct">0%</div>
+          </div>
+          <div class="goal-bar">
+            <div class="goal-fill" id="goalFill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    <button class="nav-item active" data-page="today" onclick="App.navigate('today')">
+      <span class="nav-icon">🏠</span><span class="nav-label">Bugun</span>
+    </button>
+    <button class="nav-item" data-page="tomorrow" onclick="App.navigate('tomorrow')">
+      <span class="nav-icon">📋</span><span class="nav-label">Ertaga</span>
+    </button>
+    <button class="nav-item" data-page="week" onclick="App.navigate('week')">
+      <span class="nav-icon">📆</span><span class="nav-label">Hafta</span>
+    </button>
+    <button class="nav-item" data-page="subjects" onclick="App.navigate('subjects')">
+      <span class="nav-icon">📚</span><span class="nav-label">Fanlar</span>
+    </button>
+    <button class="nav-item" data-page="pomodoro" onclick="App.navigate('pomodoro')">
+      <span class="nav-icon">⏱️</span><span class="nav-label">Pomodoro</span>
+    </button>
+    <button class="nav-item" data-page="exams" onclick="App.navigate('exams')">
+      <span class="nav-icon">📝</span><span class="nav-label">Imtihon</span>
+    </button>
+    <button class="nav-item" data-page="stats" onclick="App.navigate('stats')">
+      <span class="nav-icon">📊</span><span class="nav-label">Statistika</span>
+    </button>
+  </nav>
+
+</div><!-- #app -->
+
+<!-- ===== MODALS ===== -->
+
+<!-- Add Class Modal -->
+<div class="modal-overlay" id="modal-class">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Dars qo'shish</h3>
+      <button class="close-btn" onclick="App.closeModal('class')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Fan</label>
+        <select id="classSubject" class="form-select" required></select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Boshlanish</label>
+          <input type="time" id="classStart" class="form-input" value="08:00" required />
+        </div>
+        <div class="form-group">
+          <label>Tugash</label>
+          <input type="time" id="classEnd" class="form-input" value="09:30" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Xona / Auditoriya</label>
+        <input type="text" id="classRoom" class="form-input" placeholder="Masalan: 301-xona" />
+      </div>
+      <div class="form-group">
+        <label>O'qituvchi</label>
+        <input type="text" id="classTeacher" class="form-input" placeholder="O'qituvchi ismi" />
+      </div>
+      <div class="form-group">
+        <label>Kun(lar)</label>
+        <div class="day-checkboxes" id="dayCheckboxes">
+          <label class="day-check"><input type="checkbox" value="1" /><span>Du</span></label>
+          <label class="day-check"><input type="checkbox" value="2" /><span>Se</span></label>
+          <label class="day-check"><input type="checkbox" value="3" /><span>Ch</span></label>
+          <label class="day-check"><input type="checkbox" value="4" /><span>Pa</span></label>
+          <label class="day-check"><input type="checkbox" value="5" /><span>Ju</span></label>
+          <label class="day-check"><input type="checkbox" value="6" /><span>Sh</span></label>
+          <label class="day-check"><input type="checkbox" value="0" /><span>Ya</span></label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Dars turi</label>
+        <select id="classType" class="form-select">
+          <option value="lecture">Ma'ruza</option>
+          <option value="practice">Amaliyot</option>
+          <option value="lab">Laboratoriya</option>
+          <option value="seminar">Seminar</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.saveClass()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal-overlay" id="modal-task">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Vazifa qo'shish</h3>
+      <button class="close-btn" onclick="App.closeModal('task')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Vazifa nomi *</label>
+        <input type="text" id="taskTitle" class="form-input" placeholder="Vazifa nomi..." required />
+      </div>
+      <div class="form-group">
+        <label>Fan</label>
+        <select id="taskSubject" class="form-select"></select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Muddat</label>
+          <input type="date" id="taskDue" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label>Muhimlik</label>
+          <select id="taskPriority" class="form-select">
+            <option value="low">Oddiy</option>
+            <option value="medium" selected>O'rtacha</option>
+            <option value="high">Muhim</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Izoh</label>
+        <textarea id="taskDesc" class="form-textarea" placeholder="Qo'shimcha ma'lumot..." rows="3"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.saveTask()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Exam Modal -->
+<div class="modal-overlay" id="modal-exam">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Imtihon qo'shish</h3>
+      <button class="close-btn" onclick="App.closeModal('exam')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Fan *</label>
+        <select id="examSubject" class="form-select"></select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Sana *</label>
+          <input type="date" id="examDate" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label>Vaqt</label>
+          <input type="time" id="examTime" class="form-input" value="09:00" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Imtihon turi</label>
+        <select id="examType" class="form-select">
+          <option value="yozma">Yozma imtihon</option>
+          <option value="og'zaki">Og'zaki imtihon</option>
+          <option value="test">Test</option>
+          <option value="kurs">Kurs ishi</option>
+          <option value="diplom">Diplom ishi</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Xona / Joy</label>
+        <input type="text" id="examRoom" class="form-input" placeholder="Masalan: 201-auditoriya" />
+      </div>
+      <div class="form-group">
+        <label>Tayyorlanish mavzulari</label>
+        <textarea id="examNotes" class="form-textarea" rows="3" placeholder="Har bir mavzuni yangi qatorga yozing..."></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.saveExam()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Subject Modal -->
+<div class="modal-overlay" id="modal-subject">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Fan qo'shish</h3>
+      <button class="close-btn" onclick="App.closeModal('subject')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Fan nomi *</label>
+        <input type="text" id="subjectName" class="form-input" placeholder="Fan nomi..." required />
+      </div>
+      <div class="form-group">
+        <label>Rang</label>
+        <div class="color-picker" id="colorPicker">
+          <label class="color-opt"><input type="radio" name="subColor" value="#6C63FF" checked /><span style="background:#6C63FF"></span></label>
+          <label class="color-opt"><input type="radio" name="subColor" value="#EF4444" /><span style="background:#EF4444"></span></label>
+          <label class="color-opt"><input type="radio" name="subColor" value="#F59E0B" /><span style="background:#F59E0B"></span></label>
+          <label class="color-opt"><input type="radio" name="subColor" value="#10B981" /><span style="background:#10B981"></span></label>
+          <label class="color-opt"><input type="radio" name="subColor" value="#3B82F6" /><span style="background:#3B82F6"></span></label>
+          <label class="color-opt"><input type="radio" name="subColor" value="#8B5CF6" /><span style="background:#8B5CF6"></span></label>
+          <label class="color-opt"><input type="radio" name="subColor" value="#EC4899" /><span style="background:#EC4899"></span></label>
+          <label class="color-opt"><input type="radio" name="subColor" value="#14B8A6" /><span style="background:#14B8A6"></span></label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Emoji</label>
+        <div class="emoji-picker" id="emojiPicker">
+          <span class="emoji-opt active" onclick="App.selectEmoji(this)">📐</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">⚡</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">🧪</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">🌿</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">📜</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">🌍</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">💻</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">🎵</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">🎨</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">📖</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">🔬</span>
+          <span class="emoji-opt" onclick="App.selectEmoji(this)">📊</span>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.saveSubject()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- Floating Action Button -->
+<button class="fab" id="fabBtn" title="Tez qo'shish" onclick="App.fabAction()">＋</button>
+
+<!-- Toast notification -->
+<div id="toast" class="toast"></div>
+
+<!-- Import/Export Modal -->
+<div class="modal-overlay" id="modal-share">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Ma'lumotlarni ulashish</h3>
+      <button class="close-btn" onclick="App.closeModal('share')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="text-secondary" style="margin-bottom:16px">Jadvalingizni sinfdoshlar bilan ulashing yoki zaxira nusxa oling.</p>
+      <button class="btn btn-primary btn-full" onclick="App.exportData()" style="margin-bottom:12px">📤 Eksport qilish (JSON)</button>
+      <label class="btn btn-outline btn-full" style="cursor:pointer;text-align:center">
+        📥 Import qilish
+        <input type="file" accept=".json" style="display:none" onchange="App.importData(event)" />
+      </label>
+      <hr style="margin:16px 0;border-color:var(--border)">
+      <button class="btn btn-outline btn-full" onclick="App.copySchedule()">📋 Jadvalni nusxalash</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS MODAL ===== -->
+<div class="modal-overlay" id="modal-settings">
+  <div class="modal modal-full">
+    <div class="modal-header">
+      <h3>⚙️ Sozlamalar</h3>
+      <button class="close-btn" onclick="App.closeModal('settings')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Appearance -->
+      <div class="settings-section">
+        <h4 class="settings-section-title">🎨 Ko'rinish</h4>
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label">Qorong'u rejim</div>
+            <div class="settings-row-sub">Ko'z uchun qulay</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="settingDarkMode" onchange="App.toggleTheme()" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label">Rang mavzusi</div>
+            <div class="settings-row-sub">Asosiy rang tanlash</div>
+          </div>
+          <div class="theme-color-row" id="themeColorRow">
+            <span class="theme-color-opt active" style="background:#6C63FF" data-color="#6C63FF" onclick="App.setThemeColor(this)"></span>
+            <span class="theme-color-opt" style="background:#EC4899" data-color="#EC4899" onclick="App.setThemeColor(this)"></span>
+            <span class="theme-color-opt" style="background:#10B981" data-color="#10B981" onclick="App.setThemeColor(this)"></span>
+            <span class="theme-color-opt" style="background:#F59E0B" data-color="#F59E0B" onclick="App.setThemeColor(this)"></span>
+            <span class="theme-color-opt" style="background:#EF4444" data-color="#EF4444" onclick="App.setThemeColor(this)"></span>
+            <span class="theme-color-opt" style="background:#0EA5E9" data-color="#0EA5E9" onclick="App.setThemeColor(this)"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="settings-section">
+        <h4 class="settings-section-title">🔔 Bildirishnomalar</h4>
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label">Dars eslatmalari</div>
+            <div class="settings-row-sub">10 daqiqa oldin va boshlanishida</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="settingNotif" onchange="App.toggleNotifications()" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-row-label">Vazifa eslatmasi</div>
+            <div class="settings-row-sub">Muddati o'tayotgan vazifalar</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="settingTaskNotif" onchange="App.saveSettingsField('taskNotif', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Pomodoro -->
+      <div class="settings-section">
+        <h4 class="settings-section-title">⏱️ Pomodoro</h4>
+        <div class="settings-row">
+          <div class="settings-row-label">Ishlash vaqti (daq.)</div>
+          <input type="number" id="settingWork2" min="1" max="60" class="number-input" onchange="App.updatePomodoroSettings2()" />
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label">Dam olish vaqti (daq.)</div>
+          <input type="number" id="settingBreak2" min="1" max="30" class="number-input" onchange="App.updatePomodoroSettings2()" />
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label">Uzun tanaffus (daq.)</div>
+          <input type="number" id="settingLong2" min="5" max="60" class="number-input" onchange="App.updatePomodoroSettings2()" />
+        </div>
+        <div class="settings-row">
+          <div class="settings-row-label">Haftalik maqsad</div>
+          <input type="number" id="settingGoal2" min="1" max="100" class="number-input" onchange="App.updatePomodoroSettings2()" />
+        </div>
+      </div>
+
+      <!-- Data -->
+      <div class="settings-section">
+        <h4 class="settings-section-title">💾 Ma'lumotlar</h4>
+        <button class="btn btn-outline btn-full" onclick="App.openModal('share');App.closeModal('settings')" style="margin-bottom:8px">
+          📤 Eksport / Import
+        </button>
+        <button class="btn btn-outline btn-full" onclick="App.clearCompleted()" style="margin-bottom:8px">
+          🗑️ Bajarilgan vazifalarni tozalash
+        </button>
+        <button class="btn btn-danger btn-full" onclick="App.resetAllData()">
+          ⚠️ Barcha ma'lumotlarni o'chirish
+        </button>
+      </div>
+
+      <!-- About -->
+      <div class="settings-section">
+        <h4 class="settings-section-title">ℹ️ Ilova haqida</h4>
+        <div class="about-card">
+          <div style="font-size:40px;margin-bottom:8px">📚</div>
+          <div style="font-weight:700;font-size:16px">Talaba Rejasi</div>
+          <div style="color:var(--text-secondary);font-size:12px;margin-top:4px">Versiya 2.0 • PWA</div>
+          <div style="color:var(--text-secondary);font-size:12px;margin-top:8px">
+            Darslar, vazifalar, imtihonlar va Pomodoro — hammasi bir joyda.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Confetti Canvas -->
+<canvas id="confettiCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;display:none"></canvas>
+
+<!-- Install PWA Banner -->
+<div id="installBanner" class="install-banner" style="display:none">
+  <span>📱 Ilovani telefoningizga o'rnating!</span>
+  <button class="btn btn-primary" style="padding:6px 14px;font-size:12px" onclick="App.installPWA()">O'rnatish</button>
+  <button class="icon-btn" style="width:28px;height:28px;font-size:14px" onclick="App.dismissInstall()">✕</button>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

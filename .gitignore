@@ -1,0 +1,42 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+
+# Capacitor
+.capacitor/
+
+# Android build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+android/captures/
+android/.idea/
+android/*.iml
+android/app/*.iml
+android/app/release/
+android/keystores/
+
+# Generated assets (regenerate via npm run icons)
+# android/app/src/main/res/mipmap-*/
+# android/app/src/main/res/drawable-*/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Keystore (NEVER commit these)
+*.jks
+*.keystore
+keystore.properties
