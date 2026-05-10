@@ -8,7 +8,24 @@
 - Node.js 18+
 - Android Studio (JDK 21 ichida keladi)
 
-### Qadamlar
+### ⚡ Eng oson yo'l — bitta komanda
+
+**Windows (cmd.exe):**
+```
+update-apk.bat
+```
+
+**Windows (PowerShell):**
+```powershell
+.\update-apk.ps1
+```
+
+Skript avtomatik:
+1. Web fayllarni sync qiladi
+2. APK build qiladi
+3. Fayl manzilini ko'rsatadi va papkani ochadi
+
+### Qo'lda build qilish
 
 ```bash
 # 1. Dependencies o'rnatish
