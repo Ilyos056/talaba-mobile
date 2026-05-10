@@ -2,27 +2,17 @@
 <html lang="uz" data-theme="light">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <meta name="theme-color" content="#6C63FF" />
   <meta name="description" content="Talabalar uchun kun rejalashtiruvchi ilova" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Talaba Rejasi" />
-  <meta name="format-detection" content="telephone=no" />
   <title>Talaba Rejasi</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <link rel="stylesheet" href="css/style.css" />
-  <!-- Capacitor (faqat native app ichida ishlaydi) -->
-  <script>
-    if (window.Capacitor) {
-      document.documentElement.classList.add('is-native');
-    }
-  </script>
 </head>
 <body>
 
@@ -139,6 +129,30 @@
           <p class="text-secondary">Darslar orasidagi bo'sh vaqtlarga tavsiyalar:</p>
           <div id="autoScheduleList"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: CALENDAR (KALENDAR) ===== -->
+    <div class="page" id="page-calendar">
+      <div class="page-inner">
+        <div class="calendar-nav">
+          <button class="icon-btn" onclick="App.calMonth--; App.renderCalendar()">‹</button>
+          <h3 id="calTitle">Kalendar</h3>
+          <button class="icon-btn" onclick="App.calMonth++; App.renderCalendar()">›</button>
+        </div>
+        <button class="btn btn-outline btn-full" onclick="App.calMonth=0;App.renderCalendar()" style="margin-bottom:8px">📅 Bugunga qaytish</button>
+
+        <div class="calendar-card">
+          <div class="cal-weekdays">
+            <span>Du</span><span>Se</span><span>Ch</span><span>Pa</span><span>Ju</span><span>Sh</span><span>Ya</span>
+          </div>
+          <div class="cal-days" id="calDays"></div>
+        </div>
+
+        <div class="section-header" style="margin-top:12px">
+          <h3 id="selectedDayTitle">Tanlangan kun</h3>
+        </div>
+        <div id="selectedDayContent" class="tasks-list"></div>
       </div>
     </div>
 
@@ -261,6 +275,62 @@
       </div>
     </div>
 
+    <!-- ===== PAGE: GRADES (BAHOLAR) ===== -->
+    <div class="page" id="page-grades">
+      <div class="page-inner">
+        <div class="card grades-header-card">
+          <div class="grades-summary-row">
+            <div class="grade-summary-stat">
+              <div class="grade-num" id="overallGPA">—</div>
+              <div class="grade-label">O'rtacha (GPA)</div>
+            </div>
+            <div class="grade-summary-stat">
+              <div class="grade-num" id="totalGrades">0</div>
+              <div class="grade-label">Baholar</div>
+            </div>
+            <div class="grade-summary-stat">
+              <div class="grade-num" id="gradeAvgPct">—</div>
+              <div class="grade-label">Foiz</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <h3>Fanlar bo'yicha</h3>
+          <button class="add-btn" onclick="App.openModal('grade')">+ Baho</button>
+        </div>
+        <div id="gradesBySubject" class="grades-list"></div>
+
+        <div class="section-header" style="margin-top:16px">
+          <h3>Oxirgi baholar</h3>
+        </div>
+        <div id="recentGrades" class="grades-list"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: GOALS (MAQSADLAR) ===== -->
+    <div class="page" id="page-goals">
+      <div class="page-inner">
+        <div class="card goals-header-card">
+          <h2>🎯 Maqsadlar</h2>
+          <p class="text-secondary" id="goalsSummary">Maqsadlar qo'ying va kuzatib boring</p>
+        </div>
+
+        <div class="section-header">
+          <h3>Faol maqsadlar</h3>
+          <button class="add-btn" onclick="App.openModal('goal')">+ Maqsad</button>
+        </div>
+        <div id="goalsList" class="goals-list">
+          <div class="empty-state"><span>🎯</span><p>Maqsad qo'shilmagan</p>
+            <button class="btn btn-outline" onclick="App.openModal('goal')">Birinchi maqsad qo'shish</button>
+          </div>
+        </div>
+
+        <div class="section-header" style="margin-top:16px"><h3>Bajarilgan maqsadlar</h3></div>
+        <div id="goalsArchive" class="goals-list"></div>
+      </div>
+    </div>
+
     <!-- ===== PAGE: STATISTIKA (STATS) ===== -->
     <div class="page" id="page-stats">
       <div class="page-inner">
@@ -311,25 +381,34 @@
   <!-- Bottom Navigation -->
   <nav class="bottom-nav">
     <button class="nav-item active" data-page="today" onclick="App.navigate('today')">
-      <span class="nav-icon">🏠</span><span class="nav-label">Bugun</span>
+      <span class="nav-icon">🏠</span><span class="nav-label" data-i18n="nav_today">Bugun</span>
     </button>
     <button class="nav-item" data-page="tomorrow" onclick="App.navigate('tomorrow')">
-      <span class="nav-icon">📋</span><span class="nav-label">Ertaga</span>
+      <span class="nav-icon">📋</span><span class="nav-label" data-i18n="nav_tomorrow">Ertaga</span>
     </button>
     <button class="nav-item" data-page="week" onclick="App.navigate('week')">
-      <span class="nav-icon">📆</span><span class="nav-label">Hafta</span>
+      <span class="nav-icon">📆</span><span class="nav-label" data-i18n="nav_week">Hafta</span>
+    </button>
+    <button class="nav-item" data-page="calendar" onclick="App.navigate('calendar')">
+      <span class="nav-icon">🗓️</span><span class="nav-label" data-i18n="nav_month">Oy</span>
     </button>
     <button class="nav-item" data-page="subjects" onclick="App.navigate('subjects')">
-      <span class="nav-icon">📚</span><span class="nav-label">Fanlar</span>
+      <span class="nav-icon">📚</span><span class="nav-label" data-i18n="nav_subjects">Fanlar</span>
     </button>
     <button class="nav-item" data-page="pomodoro" onclick="App.navigate('pomodoro')">
-      <span class="nav-icon">⏱️</span><span class="nav-label">Pomodoro</span>
+      <span class="nav-icon">⏱️</span><span class="nav-label" data-i18n="nav_pomodoro">Pomodoro</span>
     </button>
     <button class="nav-item" data-page="exams" onclick="App.navigate('exams')">
-      <span class="nav-icon">📝</span><span class="nav-label">Imtihon</span>
+      <span class="nav-icon">📝</span><span class="nav-label" data-i18n="nav_exams">Imtihon</span>
+    </button>
+    <button class="nav-item" data-page="grades" onclick="App.navigate('grades')">
+      <span class="nav-icon">📈</span><span class="nav-label" data-i18n="nav_grades">Baholar</span>
+    </button>
+    <button class="nav-item" data-page="goals" onclick="App.navigate('goals')">
+      <span class="nav-icon">🎯</span><span class="nav-label" data-i18n="nav_goals">Maqsadlar</span>
     </button>
     <button class="nav-item" data-page="stats" onclick="App.navigate('stats')">
-      <span class="nav-icon">📊</span><span class="nav-label">Statistika</span>
+      <span class="nav-icon">📊</span><span class="nav-label" data-i18n="nav_stats">Statistika</span>
     </button>
   </nav>
 
@@ -421,6 +500,26 @@
             <option value="medium" selected>O'rtacha</option>
             <option value="high">Muhim</option>
           </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Takrorlanish</label>
+        <select id="taskRecurring" class="form-select">
+          <option value="none">Bir martalik</option>
+          <option value="daily">Har kuni</option>
+          <option value="weekly">Har hafta (shu kunda)</option>
+          <option value="monthly">Har oy (shu sanada)</option>
+          <option value="weekdays">Har ish kuni (Du-Ju)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Rasm biriktirish</label>
+        <div class="image-upload-area">
+          <input type="file" id="taskImageInput" accept="image/*" style="display:none" onchange="App.handleImageUpload(event)" />
+          <div id="taskImagePreview" class="image-preview-empty" onclick="document.getElementById('taskImageInput').click()">
+            <span>📷</span>
+            <p>Rasm tanlash yoki kameradan olish</p>
+          </div>
         </div>
       </div>
       <div class="form-group">
@@ -534,18 +633,172 @@
 <div class="modal-overlay" id="modal-share">
   <div class="modal">
     <div class="modal-header">
-      <h3>Ma'lumotlarni ulashish</h3>
+      <h3>📤 Ulashish</h3>
       <button class="close-btn" onclick="App.closeModal('share')">✕</button>
     </div>
     <div class="modal-body">
-      <p class="text-secondary" style="margin-bottom:16px">Jadvalingizni sinfdoshlar bilan ulashing yoki zaxira nusxa oling.</p>
-      <button class="btn btn-primary btn-full" onclick="App.exportData()" style="margin-bottom:12px">📤 Eksport qilish (JSON)</button>
-      <label class="btn btn-outline btn-full" style="cursor:pointer;text-align:center">
-        📥 Import qilish
-        <input type="file" accept=".json" style="display:none" onchange="App.importData(event)" />
-      </label>
-      <hr style="margin:16px 0;border-color:var(--border)">
-      <button class="btn btn-outline btn-full" onclick="App.copySchedule()">📋 Jadvalni nusxalash</button>
+
+      <!-- Tabs -->
+      <div class="share-tabs">
+        <button class="share-tab active" data-tab="qr" onclick="App.setShareTab('qr')">📱 QR kod</button>
+        <button class="share-tab" data-tab="link" onclick="App.setShareTab('link')">🔗 Havola</button>
+        <button class="share-tab" data-tab="file" onclick="App.setShareTab('file')">💾 Fayl</button>
+      </div>
+
+      <!-- QR Tab -->
+      <div class="share-tab-content active" id="shareTab-qr">
+        <p class="text-secondary" style="margin-bottom:12px">Sinfdoshingiz QR kodni telefoni bilan o'qisin va jadvalingiz unga import bo'ladi.</p>
+        <div class="qr-container" id="qrContainer">
+          <canvas id="qrCanvas"></canvas>
+        </div>
+        <div class="qr-options">
+          <label class="qr-option-row">
+            <input type="checkbox" id="qrIncludeTasks" /> Vazifalarni ham ulashish
+          </label>
+          <label class="qr-option-row">
+            <input type="checkbox" id="qrIncludeExams" /> Imtihonlarni ham ulashish
+          </label>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="App.generateQR()" style="margin-top:8px">🔄 QR kodni yangilash</button>
+      </div>
+
+      <!-- Link Tab -->
+      <div class="share-tab-content" id="shareTab-link" style="display:none">
+        <p class="text-secondary" style="margin-bottom:12px">Havolani nusxalab istalgan joyga yuboring.</p>
+        <div class="share-link-box">
+          <input type="text" id="shareLinkInput" readonly />
+          <button class="btn btn-primary" onclick="App.copyShareLink()" style="padding:8px 14px">📋</button>
+        </div>
+        <button class="btn btn-outline btn-full" onclick="App.generateShareLink()" style="margin-top:8px">🔄 Havolani yangilash</button>
+        <hr style="margin:16px 0;border-color:var(--border)" />
+        <button class="btn btn-outline btn-full" onclick="App.copySchedule()">📋 Matn ko'rinishida nusxalash</button>
+      </div>
+
+      <!-- File Tab -->
+      <div class="share-tab-content" id="shareTab-file" style="display:none">
+        <p class="text-secondary" style="margin-bottom:12px">Barcha ma'lumotlarni fayl ko'rinishida saqlang yoki yuklang.</p>
+        <button class="btn btn-primary btn-full" onclick="App.exportData()" style="margin-bottom:12px">📤 JSON fayl yuklab olish</button>
+        <label class="btn btn-outline btn-full" style="cursor:pointer;text-align:center">
+          📥 JSON fayl import qilish
+          <input type="file" accept=".json" style="display:none" onchange="App.importData(event)" />
+        </label>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Import from URL prompt -->
+<div class="modal-overlay" id="modal-import-url">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📥 Jadvalni qabul qilish</h3>
+      <button class="close-btn" onclick="App.closeModal('import-url')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="importPreview" style="margin-bottom:16px"></p>
+      <p class="text-secondary" style="margin-bottom:12px;font-size:12px">⚠️ Mavjud ma'lumotlaringiz o'rniga import bo'ladi!</p>
+      <button class="btn btn-primary btn-full" onclick="App.confirmImportFromUrl()" style="margin-bottom:8px">✅ Import qilish</button>
+      <button class="btn btn-outline btn-full" onclick="App.confirmImportFromUrl(true)">➕ Mavjudga qo'shish</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== GRADE MODAL ===== -->
+<div class="modal-overlay" id="modal-grade">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Baho qo'shish</h3>
+      <button class="close-btn" onclick="App.closeModal('grade')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Fan *</label>
+        <select id="gradeSubject" class="form-select"></select>
+      </div>
+      <div class="form-group">
+        <label>Topshiriq turi *</label>
+        <select id="gradeType" class="form-select">
+          <option value="kunlik">📝 Kunlik baho</option>
+          <option value="test">📋 Test</option>
+          <option value="kontrolnoy">📄 Nazorat ishi</option>
+          <option value="oraliq">📊 Oraliq imtihon</option>
+          <option value="yakuniy">🎓 Yakuniy imtihon</option>
+          <option value="laboratoriya">🔬 Laboratoriya</option>
+          <option value="kurs">📚 Kurs ishi</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Olingan ball *</label>
+          <input type="number" id="gradeScore" class="form-input" min="0" step="0.1" placeholder="85" required />
+        </div>
+        <div class="form-group">
+          <label>Maksimum ball *</label>
+          <input type="number" id="gradeMax" class="form-input" min="1" value="100" required />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Sana</label>
+          <input type="date" id="gradeDate" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label>Vaznlik (%)</label>
+          <input type="number" id="gradeWeight" class="form-input" min="1" max="100" value="10" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Izoh</label>
+        <input type="text" id="gradeNote" class="form-input" placeholder="Masalan: 1-bob bo'yicha..." />
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.saveGrade()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== GOAL MODAL ===== -->
+<div class="modal-overlay" id="modal-goal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Maqsad qo'shish</h3>
+      <button class="close-btn" onclick="App.closeModal('goal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Maqsad nomi *</label>
+        <input type="text" id="goalTitle" class="form-input" placeholder="Masalan: 20 ta pomodoro qilish" required />
+      </div>
+      <div class="form-group">
+        <label>Tur</label>
+        <select id="goalType" class="form-select" onchange="App.onGoalTypeChange()">
+          <option value="weekly">📅 Haftalik</option>
+          <option value="monthly">🗓️ Oylik</option>
+          <option value="custom">📌 Maxsus muddat</option>
+        </select>
+      </div>
+      <div class="form-group" id="goalDeadlineGroup" style="display:none">
+        <label>Muddat</label>
+        <input type="date" id="goalDeadline" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label>O'lchov turi</label>
+        <select id="goalMetric" class="form-select">
+          <option value="pomodoro">🍅 Pomodoro sessiyalari</option>
+          <option value="tasks">✅ Bajarilgan vazifalar</option>
+          <option value="hours">⏰ O'qish soatlari</option>
+          <option value="manual">📝 Qo'lda kuzatish</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Maqsad qiymati *</label>
+        <input type="number" id="goalTarget" class="form-input" min="1" max="999" value="10" required />
+      </div>
+      <div class="form-group">
+        <label>Tavsif</label>
+        <textarea id="goalDesc" class="form-textarea" rows="2" placeholder="Nima uchun bu maqsad muhim?"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="App.saveGoal()">Saqlash</button>
     </div>
   </div>
 </div>
@@ -585,6 +838,22 @@
             <span class="theme-color-opt" style="background:#EF4444" data-color="#EF4444" onclick="App.setThemeColor(this)"></span>
             <span class="theme-color-opt" style="background:#0EA5E9" data-color="#0EA5E9" onclick="App.setThemeColor(this)"></span>
           </div>
+        </div>
+      </div>
+
+      <!-- Language -->
+      <div class="settings-section">
+        <h4 class="settings-section-title">🌐 Til / Language / Язык</h4>
+        <div class="lang-selector" id="langSelector">
+          <button class="lang-btn" data-lang="uz" onclick="App.setLanguage('uz')">
+            🇺🇿 <span>O'zbek</span>
+          </button>
+          <button class="lang-btn" data-lang="en" onclick="App.setLanguage('en')">
+            🇬🇧 <span>English</span>
+          </button>
+          <button class="lang-btn" data-lang="ru" onclick="App.setLanguage('ru')">
+            🇷🇺 <span>Русский</span>
+          </button>
         </div>
       </div>
 
@@ -665,6 +934,12 @@
   </div>
 </div>
 
+<!-- Image Viewer -->
+<div id="imageViewer" class="image-viewer" onclick="App.closeImageViewer()">
+  <button class="image-viewer-close" onclick="event.stopPropagation();App.closeImageViewer()">✕</button>
+  <img id="imageViewerImg" src="" alt="" />
+</div>
+
 <!-- Confetti Canvas -->
 <canvas id="confettiCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;display:none"></canvas>
 
@@ -675,6 +950,7 @@
   <button class="icon-btn" style="width:28px;height:28px;font-size:14px" onclick="App.dismissInstall()">✕</button>
 </div>
 
+<script src="js/i18n.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

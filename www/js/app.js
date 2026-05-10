@@ -18,6 +18,8 @@ const defaultData = {
   tasks: [],
   exams: [],
   pomodoroSessions: [],
+  goals: [],
+  grades: [],
   settings: {
     darkMode: false,
     pomodoroWork: 25,
@@ -68,6 +70,8 @@ const App = {
   data: null,
   currentPage: 'today',
   weekOffset: 0,
+  calMonth: 0,        // 0 = current month, +1 next, -1 prev
+  calSelectedDate: null,
   pomodoroInterval: null,
   pomodoroSeconds: 0,
   pomodoroMode: 'work',
@@ -88,6 +92,7 @@ const App = {
   init() {
     this.loadData();
     this.applyTheme();
+    this.applyLanguage();
     this.updateHeader();
     this.startClock();
     this.renderToday();
@@ -104,6 +109,7 @@ const App = {
       this.deferredInstallPrompt = e;
       document.getElementById('installBanner').style.display = 'flex';
     });
+    setTimeout(() => this.checkUrlForShare(), 500);
   },
 
   loadData() {
@@ -121,6 +127,8 @@ const App = {
       if (!this.data.tasks) this.data.tasks = [];
       if (!this.data.exams) this.data.exams = [];
       if (!this.data.pomodoroSessions) this.data.pomodoroSessions = [];
+      if (!this.data.goals) this.data.goals = [];
+      if (!this.data.grades) this.data.grades = [];
       if (!this.data.settings) this.data.settings = { ...defaultData.settings };
     } catch {
       this.data = JSON.parse(JSON.stringify(defaultData));
@@ -200,6 +208,33 @@ const App = {
     this.save();
     this.applyTheme();
     if (this.charts.weekly) this.refreshCharts();
+  },
+
+  // ------------------------------------------
+  // LANGUAGE
+  // ------------------------------------------
+  applyLanguage() {
+    if (!this.data.settings.language) this.data.settings.language = 'uz';
+    document.documentElement.setAttribute('lang', this.data.settings.language);
+    if (typeof applyTranslations === 'function') applyTranslations();
+    // Update active language button
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+    const active = document.querySelector(`.lang-btn[data-lang="${this.data.settings.language}"]`);
+    if (active) active.classList.add('active');
+  },
+
+  setLanguage(lang) {
+    this.data.settings.language = lang;
+    this.save();
+    this.applyLanguage();
+    // Re-render current page to update dynamic content
+    this.renderToday();
+    this.renderTomorrow();
+    if (this.currentPage !== 'today' && this.currentPage !== 'tomorrow') {
+      this.navigate(this.currentPage);
+    }
+    const names = { uz: 'O\'zbek', en: 'English', ru: 'Русский' };
+    this.toast(`🌐 ${names[lang]} ✓`);
   },
 
   // ------------------------------------------
@@ -402,6 +437,9 @@ const App = {
     if (page === 'stats') this.renderStats();
     if (page === 'today') this.renderToday();
     if (page === 'tomorrow') this.renderTomorrow();
+    if (page === 'goals') this.renderGoals();
+    if (page === 'calendar') this.renderCalendar();
+    if (page === 'grades') this.renderGrades();
   },
 
   // ------------------------------------------
@@ -440,7 +478,38 @@ const App = {
   },
 
   tasksForDate(dateStr) {
-    return this.data.tasks.filter(t => t.dueDate === dateStr);
+    const direct = this.data.tasks.filter(t => t.dueDate === dateStr);
+    const recurring = this.recurringTasksFor(dateStr);
+    return [...direct, ...recurring];
+  },
+
+  recurringTasksFor(dateStr) {
+    const date = new Date(dateStr + 'T00:00:00');
+    const dow = date.getDay();
+    const dom = date.getDate();
+    const result = [];
+    for (const t of this.data.tasks) {
+      if (!t.recurring || t.recurring === 'none') continue;
+      // Don't duplicate if this is the original date
+      if (t.dueDate === dateStr) continue;
+      // Don't show before original due date
+      if (t.dueDate && dateStr < t.dueDate) continue;
+      const orig = t.dueDate ? new Date(t.dueDate + 'T00:00:00') : null;
+      let match = false;
+      switch (t.recurring) {
+        case 'daily':    match = true; break;
+        case 'weekly':   match = orig && orig.getDay() === dow; break;
+        case 'monthly':  match = orig && orig.getDate() === dom; break;
+        case 'weekdays': match = dow >= 1 && dow <= 5; break;
+      }
+      if (match) {
+        // Generate virtual instance with composite ID
+        const virtualId = `${t.id}__${dateStr}`;
+        const completed = (t.completedDates || []).includes(dateStr);
+        result.push({ ...t, id: virtualId, dueDate: dateStr, completed, isRecurringInstance: true, originalId: t.id });
+      }
+    }
+    return result;
   },
 
   isOngoing(startTime, endTime) {
@@ -646,6 +715,10 @@ const App = {
       else if (due === 1) { dueClass='today'; dueText='Ertaga'; }
       else dueText = `${this.formatDate(t.dueDate)} (${due} kun)`;
     }
+    const recIcons = { daily:'🔁 Har kuni', weekly:'🔁 Har hafta', monthly:'🔁 Har oy', weekdays:'🔁 Ish kunlari' };
+    const recBadge = t.recurring && t.recurring !== 'none'
+      ? `<span style="font-size:10px;background:var(--primary-light);color:var(--primary);padding:1px 6px;border-radius:10px;font-weight:600">${recIcons[t.recurring] || '🔁'}</span>`
+      : '';
     return `<div class="task-item ${t.completed?'done':''}" id="task-${t.id}">
       <div class="priority-dot priority-${t.priority||'medium'}"></div>
       <div class="task-check ${t.completed?'checked':''}" onclick="App.toggleTask('${t.id}')">
@@ -656,9 +729,12 @@ const App = {
         <div class="task-meta">
           <span class="task-subject-tag" style="background:${sub.color}22;color:${sub.color}">${sub.icon} ${sub.name}</span>
           ${t.dueDate ? `<span class="task-due ${dueClass}">${dueText}</span>` : ''}
+          ${recBadge}
+          ${t.image ? '<span style="font-size:11px">📷</span>' : ''}
         </div>
         ${t.description ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${this.escHtml(t.description)}</div>` : ''}
       </div>
+      ${t.image ? `<img src="${t.image}" class="task-image-thumb" alt="task" onclick="event.stopPropagation();App.openImageViewer('${t.image}')" />` : ''}
       <div class="task-actions">
         <button class="task-del" title="Tahrirlash" onclick="App.editTask('${t.id}')">✏️</button>
         <button class="task-del" title="O'chirish" onclick="App.deleteTask('${t.id}')">🗑️</button>
@@ -983,6 +1059,458 @@ const App = {
   },
 
   // ------------------------------------------
+  // GRADES / GPA
+  // ------------------------------------------
+  renderGrades() {
+    const grades = this.data.grades || [];
+
+    // Overall stats
+    document.getElementById('totalGrades').textContent = grades.length;
+
+    if (grades.length) {
+      const totalPct = grades.reduce((sum, g) => sum + (g.score / g.max * 100), 0) / grades.length;
+      document.getElementById('gradeAvgPct').textContent = totalPct.toFixed(1) + '%';
+      document.getElementById('overallGPA').textContent = this.pctToGPA(totalPct).toFixed(2);
+    } else {
+      document.getElementById('gradeAvgPct').textContent = '—';
+      document.getElementById('overallGPA').textContent = '—';
+    }
+
+    // By subject
+    const bySubject = document.getElementById('gradesBySubject');
+    const grouped = {};
+    grades.forEach(g => {
+      if (!grouped[g.subjectId]) grouped[g.subjectId] = [];
+      grouped[g.subjectId].push(g);
+    });
+
+    if (!Object.keys(grouped).length) {
+      bySubject.innerHTML = `<div class="empty-state"><span>📈</span><p>Hali baholar yo'q</p>
+        <button class="btn btn-outline" onclick="App.openModal('grade')">Birinchi baho qo'shish</button></div>`;
+    } else {
+      bySubject.innerHTML = Object.entries(grouped).map(([sid, list]) => {
+        const sub = this.getSubject(sid);
+        // Weighted average
+        const totalWeight = list.reduce((s, g) => s + (g.weight || 10), 0);
+        const weighted = list.reduce((s, g) => s + (g.score / g.max * 100) * (g.weight || 10), 0) / totalWeight;
+        const letter = this.pctToLetter(weighted);
+        return `<div class="grade-subject-card">
+          <div class="grade-subject-header">
+            <div class="grade-subject-name" style="color:${sub.color}">${sub.icon} ${sub.name}</div>
+            <span class="grade-subject-gpa grade-color-${letter}">${letter} • ${weighted.toFixed(1)}%</span>
+          </div>
+          ${list.slice(-5).reverse().map(g => this.renderGradeRow(g)).join('')}
+        </div>`;
+      }).join('');
+    }
+
+    // Recent grades
+    const recent = document.getElementById('recentGrades');
+    const sorted = [...grades].sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0, 8);
+    if (!sorted.length) {
+      recent.innerHTML = '';
+    } else {
+      recent.innerHTML = sorted.map(g => {
+        const sub = this.getSubject(g.subjectId);
+        return `<div class="grade-subject-card" style="padding:12px 14px">
+          ${this.renderGradeRow(g, true, sub)}
+        </div>`;
+      }).join('');
+    }
+  },
+
+  renderGradeRow(g, showSubject = false, sub = null) {
+    const pct = g.score / g.max * 100;
+    const letter = this.pctToLetter(pct);
+    const types = {
+      kunlik:'📝 Kunlik', test:'📋 Test', kontrolnoy:'📄 Nazorat',
+      oraliq:'📊 Oraliq', yakuniy:'🎓 Yakuniy',
+      laboratoriya:'🔬 Laboratoriya', kurs:'📚 Kurs ishi'
+    };
+    return `<div class="grade-list-row">
+      <div class="grade-row-info">
+        <span class="grade-row-type">${types[g.type] || g.type}${showSubject && sub ? ' • ' + sub.icon + ' ' + sub.name : ''}</span>
+        <span class="grade-row-meta">${g.date ? this.formatDate(g.date) : ''} ${g.note ? '• ' + this.escHtml(g.note) : ''}</span>
+      </div>
+      <div class="grade-row-actions">
+        <span class="grade-row-score grade-color-${letter}">${g.score}/${g.max}</span>
+        <button class="grade-del" onclick="App.deleteGrade('${g.id}')">🗑️</button>
+      </div>
+    </div>`;
+  },
+
+  pctToLetter(pct) {
+    if (pct >= 90) return 'A';
+    if (pct >= 80) return 'B';
+    if (pct >= 70) return 'C';
+    if (pct >= 60) return 'D';
+    return 'F';
+  },
+
+  pctToGPA(pct) {
+    // 4.0 scale
+    if (pct >= 90) return 4.0;
+    if (pct >= 85) return 3.7;
+    if (pct >= 80) return 3.3;
+    if (pct >= 75) return 3.0;
+    if (pct >= 70) return 2.7;
+    if (pct >= 65) return 2.3;
+    if (pct >= 60) return 2.0;
+    if (pct >= 55) return 1.7;
+    if (pct >= 50) return 1.3;
+    return 0;
+  },
+
+  saveGrade() {
+    const subjectId = document.getElementById('gradeSubject').value;
+    const type = document.getElementById('gradeType').value;
+    const score = parseFloat(document.getElementById('gradeScore').value);
+    const max = parseFloat(document.getElementById('gradeMax').value);
+    const date = document.getElementById('gradeDate').value;
+    const weight = parseInt(document.getElementById('gradeWeight').value) || 10;
+    const note = document.getElementById('gradeNote').value.trim();
+
+    if (!subjectId) { this.toast('⚠️ Fan tanlang'); return; }
+    if (isNaN(score) || isNaN(max) || max < 1) { this.toast('⚠️ Ballarni to\'g\'ri kiriting'); return; }
+    if (score < 0 || score > max) { this.toast('⚠️ Ball 0 dan ' + max + ' gacha bo\'lishi kerak'); return; }
+
+    if (!this.data.grades) this.data.grades = [];
+    this.data.grades.push({ id: this.uid(), subjectId, type, score, max, date: date || this.dateStr(0), weight, note, createdAt: Date.now() });
+    this.save();
+    this.closeModal('grade');
+    this.renderGrades();
+    document.getElementById('gradeScore').value = '';
+    document.getElementById('gradeNote').value = '';
+    const pct = score / max * 100;
+    if (pct >= 90) this.fireConfetti();
+    this.toast(`✅ Baho qo'shildi: ${this.pctToLetter(pct)} (${pct.toFixed(0)}%)`);
+  },
+
+  deleteGrade(id) {
+    if (!confirm('Bu bahoni o\'chirmoqchimisiz?')) return;
+    this.data.grades = this.data.grades.filter(g => g.id !== id);
+    this.save();
+    this.renderGrades();
+    this.toast('🗑️ Baho o\'chirildi');
+  },
+
+  // ------------------------------------------
+  // CALENDAR PAGE
+  // ------------------------------------------
+  renderCalendar() {
+    const months = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthIdx = now.getMonth() + this.calMonth;
+    const targetDate = new Date(year, monthIdx, 1);
+    const targetYear = targetDate.getFullYear();
+    const targetMonth = targetDate.getMonth();
+
+    document.getElementById('calTitle').textContent =
+      `${months[targetMonth]} ${targetYear}`;
+
+    // Build day grid (Mon-Sun)
+    const firstDay = new Date(targetYear, targetMonth, 1);
+    const lastDay = new Date(targetYear, targetMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDow = (firstDay.getDay() + 6) % 7; // Mon=0
+    const todayStr = this.dateStr(0);
+
+    // Previous month padding days
+    const prevMonthLastDay = new Date(targetYear, targetMonth, 0).getDate();
+    const cells = [];
+
+    // Previous month visible days
+    for (let i = startDow - 1; i >= 0; i--) {
+      const d = prevMonthLastDay - i;
+      const dt = new Date(targetYear, targetMonth - 1, d);
+      cells.push({ date: dt.toISOString().slice(0,10), num: d, otherMonth: true });
+    }
+
+    // Current month days
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(targetYear, targetMonth, d);
+      cells.push({ date: dt.toISOString().slice(0,10), num: d, otherMonth: false });
+    }
+
+    // Pad to complete last week (multiples of 7)
+    while (cells.length % 7 !== 0) {
+      const last = new Date(cells[cells.length-1].date + 'T00:00:00');
+      last.setDate(last.getDate() + 1);
+      cells.push({ date: last.toISOString().slice(0,10), num: last.getDate(), otherMonth: true });
+    }
+
+    document.getElementById('calDays').innerHTML = cells.map(cell => {
+      const isToday = cell.date === todayStr;
+      const isSelected = cell.date === this.calSelectedDate;
+      const dots = this.calDayDots(cell.date);
+      return `<div class="cal-day ${cell.otherMonth?'other-month':''} ${isToday?'today':''} ${isSelected?'selected':''}"
+        onclick="App.selectCalendarDay('${cell.date}')">
+        <span class="cal-day-num">${cell.num}</span>
+        <div class="cal-dots">${dots}</div>
+      </div>`;
+    }).join('');
+
+    if (!this.calSelectedDate) this.calSelectedDate = todayStr;
+    this.renderSelectedDay();
+  },
+
+  calDayDots(dateStr) {
+    const date = new Date(dateStr + 'T00:00:00');
+    const dow = date.getDay();
+    const dots = [];
+    // Classes (using subject color)
+    const classes = this.classesForDay(dow);
+    classes.slice(0,3).forEach(c => {
+      const sub = this.getSubject(c.subjectId);
+      dots.push(`<span class="cal-dot" style="background:${sub.color}"></span>`);
+    });
+    // Tasks
+    const tasks = this.tasksForDate(dateStr);
+    if (tasks.length > 0) dots.push(`<span class="cal-dot" style="background:#10B981"></span>`);
+    // Exams
+    const exams = this.data.exams.filter(e => e.date === dateStr);
+    if (exams.length > 0) dots.push(`<span class="cal-dot" style="background:#EF4444"></span>`);
+    return dots.slice(0, 4).join('');
+  },
+
+  selectCalendarDay(dateStr) {
+    this.calSelectedDate = dateStr;
+    this.renderCalendar();
+  },
+
+  renderSelectedDay() {
+    const date = this.calSelectedDate;
+    const dt = new Date(date + 'T00:00:00');
+    const days = ['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'];
+    const months = ['Yan','Fev','Mar','Apr','May','Iyn','Iyl','Avg','Sen','Okt','Noy','Dek'];
+    document.getElementById('selectedDayTitle').textContent =
+      `${days[dt.getDay()]}, ${dt.getDate()} ${months[dt.getMonth()]}`;
+
+    const classes = this.classesForDay(dt.getDay());
+    const tasks = this.tasksForDate(date);
+    const exams = this.data.exams.filter(e => e.date === date);
+
+    let html = '';
+    if (classes.length) {
+      html += `<div style="font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin:8px 0 4px;letter-spacing:1px">📚 Darslar</div>`;
+      html += classes.map(c => {
+        const sub = this.getSubject(c.subjectId);
+        return `<div class="timeline-item">
+          <div class="timeline-color" style="background:${sub.color}"></div>
+          <div class="timeline-info">
+            <div class="timeline-subject">${sub.icon} ${sub.name}</div>
+            <div class="timeline-meta">${c.room ? '🏫 ' + c.room : ''} ${c.teacher ? '👤 ' + c.teacher : ''}</div>
+          </div>
+          <div class="timeline-time"><div>${c.startTime}</div><div style="font-size:11px;margin-top:2px">${c.endTime}</div></div>
+        </div>`;
+      }).join('');
+    }
+    if (tasks.length) {
+      html += `<div style="font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin:12px 0 4px;letter-spacing:1px">✅ Vazifalar</div>`;
+      html += tasks.map(t => this.renderTaskItem(t)).join('');
+    }
+    if (exams.length) {
+      html += `<div style="font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin:12px 0 4px;letter-spacing:1px">📝 Imtihonlar</div>`;
+      html += exams.map(e => {
+        const sub = this.getSubject(e.subjectId);
+        return `<div class="timeline-item">
+          <div class="timeline-color" style="background:#EF4444"></div>
+          <div class="timeline-info">
+            <div class="timeline-subject">${sub.icon} ${sub.name}</div>
+            <div class="timeline-meta">${e.examType} ${e.room ? '• ' + e.room : ''}</div>
+          </div>
+          <div class="timeline-time">${e.examTime || ''}</div>
+        </div>`;
+      }).join('');
+    }
+    if (!html) {
+      html = `<div class="empty-state"><span>📭</span><p>Bu kunda hech narsa yo'q</p></div>`;
+    }
+    document.getElementById('selectedDayContent').innerHTML = html;
+  },
+
+  // ------------------------------------------
+  // GOALS PAGE
+  // ------------------------------------------
+  renderGoals() {
+    const list = document.getElementById('goalsList');
+    const archive = document.getElementById('goalsArchive');
+    const goals = this.data.goals || [];
+
+    const active = goals.filter(g => !this.isGoalCompleted(g));
+    const completed = goals.filter(g => this.isGoalCompleted(g));
+
+    document.getElementById('goalsSummary').textContent =
+      `${active.length} faol, ${completed.length} bajarildi`;
+
+    if (!active.length) {
+      list.innerHTML = `<div class="empty-state"><span>🎯</span><p>Faol maqsad yo'q</p>
+        <button class="btn btn-outline" onclick="App.openModal('goal')">Maqsad qo'shish</button></div>`;
+    } else {
+      list.innerHTML = active.map(g => this.renderGoalCard(g)).join('');
+    }
+
+    if (!completed.length) {
+      archive.innerHTML = `<p class="text-secondary" style="text-align:center;padding:12px">Hali bajarilgan maqsad yo'q</p>`;
+    } else {
+      archive.innerHTML = completed.slice(-5).reverse().map(g => this.renderGoalCard(g)).join('');
+    }
+  },
+
+  renderGoalCard(g) {
+    const progress = this.calcGoalProgress(g);
+    const pct = Math.min(100, Math.round(progress / g.target * 100));
+    const fillClass = pct >= 100 ? 'success' : pct >= 70 ? '' : pct < 30 ? 'warn' : '';
+    const completed = this.isGoalCompleted(g);
+    const metricLabels = { pomodoro:'🍅 Pomodoro', tasks:'✅ Vazifa', hours:'⏰ Soat', manual:'📝 Qo\'lda' };
+    const typeLabels = { weekly:'📅 Haftalik', monthly:'🗓️ Oylik', custom:'📌 Maxsus' };
+
+    let deadlineBadge = '';
+    if (g.type === 'custom' && g.deadline) {
+      const days = this.daysUntil(g.deadline);
+      let bg = '#10B98122', col = '#10B981';
+      if (days < 0) { bg='#6B728022'; col='#6B7280'; }
+      else if (days <= 3) { bg='#EF444422'; col='#EF4444'; }
+      else if (days <= 7) { bg='#F59E0B22'; col='#F59E0B'; }
+      deadlineBadge = `<span class="goal-deadline-badge" style="background:${bg};color:${col}">${days < 0 ? 'Muddati o\'tdi' : days + ' kun qoldi'}</span>`;
+    } else if (g.type === 'weekly' || g.type === 'monthly') {
+      deadlineBadge = `<span class="goal-deadline-badge">${typeLabels[g.type]}</span>`;
+    }
+
+    return `<div class="goal-card ${completed ? 'completed' : ''}">
+      <button class="goal-del" onclick="App.deleteGoal('${g.id}')">✕</button>
+      <div class="goal-header">
+        <div class="goal-icon">${completed ? '🏆' : '🎯'}</div>
+        <div class="goal-info">
+          <div class="goal-title">${this.escHtml(g.title)}</div>
+          <div class="goal-meta">
+            <span>${metricLabels[g.metric]}</span>
+            ${deadlineBadge}
+          </div>
+          ${g.description ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:4px">${this.escHtml(g.description)}</div>` : ''}
+        </div>
+      </div>
+      <div class="goal-progress">
+        <div class="goal-progress-bar">
+          <div class="goal-progress-fill ${fillClass}" style="width:${pct}%"></div>
+        </div>
+        <div class="goal-progress-text">
+          <span><strong>${progress}</strong> / ${g.target} ${this.metricUnit(g.metric)}</span>
+          <span><strong>${pct}%</strong></span>
+        </div>
+      </div>
+      ${g.metric === 'manual' && !completed ? `<div class="goal-actions">
+        <button class="goal-manual-btn" onclick="App.incrementGoal('${g.id}', -1)">− 1</button>
+        <button class="goal-manual-btn" onclick="App.incrementGoal('${g.id}', 1)">+ 1</button>
+      </div>` : ''}
+    </div>`;
+  },
+
+  metricUnit(metric) {
+    return { pomodoro:'sessiya', tasks:'vazifa', hours:'soat', manual:'' }[metric] || '';
+  },
+
+  calcGoalProgress(g) {
+    if (g.metric === 'manual') return g.manualProgress || 0;
+    const range = this.goalDateRange(g);
+    if (g.metric === 'pomodoro') {
+      return this.data.pomodoroSessions.filter(s =>
+        s.completed && s.date >= range.start && s.date <= range.end
+      ).length;
+    }
+    if (g.metric === 'tasks') {
+      let count = this.data.tasks.filter(t =>
+        t.completed && t.dueDate >= range.start && t.dueDate <= range.end
+      ).length;
+      // Include recurring task completions
+      this.data.tasks.forEach(t => {
+        if (t.completedDates) {
+          count += t.completedDates.filter(d => d >= range.start && d <= range.end).length;
+        }
+      });
+      return count;
+    }
+    if (g.metric === 'hours') {
+      const mins = this.data.pomodoroSessions.filter(s =>
+        s.completed && s.date >= range.start && s.date <= range.end
+      ).reduce((sum, s) => sum + (s.duration || 0), 0);
+      return Math.round(mins / 60 * 10) / 10;
+    }
+    return 0;
+  },
+
+  goalDateRange(g) {
+    const today = this.dateStr(0);
+    if (g.type === 'weekly') {
+      const d = new Date();
+      const dayOfWeek = (d.getDay() + 6) % 7; // Mon=0
+      const monday = new Date(d); monday.setDate(d.getDate() - dayOfWeek);
+      const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+      return { start: monday.toISOString().slice(0,10), end: sunday.toISOString().slice(0,10) };
+    }
+    if (g.type === 'monthly') {
+      const d = new Date();
+      const first = new Date(d.getFullYear(), d.getMonth(), 1);
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      return { start: first.toISOString().slice(0,10), end: last.toISOString().slice(0,10) };
+    }
+    return { start: g.createdAt ? new Date(g.createdAt).toISOString().slice(0,10) : today, end: g.deadline || today };
+  },
+
+  isGoalCompleted(g) {
+    return this.calcGoalProgress(g) >= g.target;
+  },
+
+  onGoalTypeChange() {
+    const type = document.getElementById('goalType').value;
+    document.getElementById('goalDeadlineGroup').style.display = type === 'custom' ? '' : 'none';
+    if (type === 'custom') document.getElementById('goalDeadline').value = this.dateStr(7);
+  },
+
+  saveGoal() {
+    const title = document.getElementById('goalTitle').value.trim();
+    const type = document.getElementById('goalType').value;
+    const metric = document.getElementById('goalMetric').value;
+    const target = parseInt(document.getElementById('goalTarget').value);
+    const description = document.getElementById('goalDesc').value.trim();
+    const deadline = type === 'custom' ? document.getElementById('goalDeadline').value : null;
+
+    if (!title) { this.toast('⚠️ Maqsad nomini kiriting'); return; }
+    if (!target || target < 1) { this.toast('⚠️ Maqsad qiymati kerak'); return; }
+    if (type === 'custom' && !deadline) { this.toast('⚠️ Muddatni kiriting'); return; }
+
+    if (!this.data.goals) this.data.goals = [];
+    this.data.goals.push({
+      id: this.uid(), title, type, metric, target, description, deadline,
+      manualProgress: 0, createdAt: Date.now(),
+    });
+    this.save();
+    this.closeModal('goal');
+    this.renderGoals();
+    document.getElementById('goalTitle').value = '';
+    document.getElementById('goalDesc').value = '';
+    this.toast('🎯 Maqsad qo\'shildi!');
+  },
+
+  incrementGoal(id, delta) {
+    const g = this.data.goals.find(x => x.id === id);
+    if (!g) return;
+    g.manualProgress = Math.max(0, (g.manualProgress || 0) + delta);
+    this.save();
+    this.renderGoals();
+    if (g.manualProgress >= g.target) this.fireConfetti();
+  },
+
+  deleteGoal(id) {
+    if (!confirm('Bu maqsadni o\'chirmoqchimisiz?')) return;
+    this.data.goals = this.data.goals.filter(g => g.id !== id);
+    this.save();
+    this.renderGoals();
+    this.toast('🗑️ Maqsad o\'chirildi');
+  },
+
+  // ------------------------------------------
   // EXAMS PAGE
   // ------------------------------------------
   renderExams() {
@@ -1150,14 +1678,23 @@ const App = {
   // ------------------------------------------
   openModal(type) {
     if (type === 'settings') { this.openSettings(); return; }
+    if (type === 'share') {
+      document.getElementById('modal-share').classList.add('open');
+      setTimeout(() => this.generateQR(), 100);
+      return;
+    }
     const tomorrow = this.dateStr(1);
     if (type === 'task') {
       this.editingTaskId = null;
+      this.currentTaskImage = null;
       document.getElementById('taskDue').value = tomorrow;
       document.getElementById('taskTitle').value = '';
       document.getElementById('taskDesc').value = '';
       document.getElementById('taskPriority').value = 'medium';
+      const recSel = document.getElementById('taskRecurring');
+      if (recSel) recSel.value = 'none';
       this.populateSelect('taskSubject');
+      this.updateImagePreview(null);
       document.querySelector('#modal-task .modal-header h3').textContent = 'Vazifa qo\'shish';
     }
     if (type === 'class') {
@@ -1172,19 +1709,36 @@ const App = {
       document.getElementById('examNotes').value = '';
       document.getElementById('examRoom').value = '';
     }
+    if (type === 'grade') {
+      this.populateSelect('gradeSubject');
+      document.getElementById('gradeDate').value = this.dateStr(0);
+      document.getElementById('gradeScore').value = '';
+      document.getElementById('gradeMax').value = '100';
+      document.getElementById('gradeWeight').value = '10';
+      document.getElementById('gradeNote').value = '';
+    }
+    if (type === 'goal') {
+      this.onGoalTypeChange();
+    }
     document.getElementById('modal-' + type).classList.add('open');
   },
 
   editTask(id) {
-    const t = this.data.tasks.find(x => x.id === id);
+    // If recurring instance, edit the original
+    const realId = id.includes('__') ? id.split('__')[0] : id;
+    const t = this.data.tasks.find(x => x.id === realId);
     if (!t) return;
-    this.editingTaskId = id;
+    this.editingTaskId = realId;
     this.populateSelect('taskSubject');
     document.getElementById('taskTitle').value = t.title;
     document.getElementById('taskSubject').value = t.subjectId;
     document.getElementById('taskDue').value = t.dueDate || '';
     document.getElementById('taskPriority').value = t.priority || 'medium';
     document.getElementById('taskDesc').value = t.description || '';
+    const recSel = document.getElementById('taskRecurring');
+    if (recSel) recSel.value = t.recurring || 'none';
+    this.updateImagePreview(t.image || null);
+    if (t.image) this.currentTaskImage = t.image;
     document.querySelector('#modal-task .modal-header h3').textContent = 'Vazifani tahrirlash';
     document.getElementById('modal-task').classList.add('open');
   },
@@ -1220,7 +1774,7 @@ const App = {
   },
 
   populateSubjectSelects() {
-    ['classSubject','taskSubject','examSubject','pomodoroSubject'].forEach(id => {
+    ['classSubject','taskSubject','examSubject','pomodoroSubject','gradeSubject'].forEach(id => {
       this.populateSelect(id);
     });
   },
@@ -1263,18 +1817,21 @@ const App = {
     const dueDate = document.getElementById('taskDue').value;
     const priority = document.getElementById('taskPriority').value;
     const description = document.getElementById('taskDesc').value.trim();
+    const recurring = document.getElementById('taskRecurring')?.value || 'none';
 
     if (!title) { this.toast('⚠️ Vazifa nomini kiriting'); return; }
     if (!dueDate) { this.toast('⚠️ Muddatni kiriting'); return; }
 
+    const image = this.currentTaskImage || null;
     if (this.editingTaskId) {
       const t = this.data.tasks.find(x => x.id === this.editingTaskId);
-      if (t) Object.assign(t, { title, subjectId, dueDate, priority, description });
+      if (t) Object.assign(t, { title, subjectId, dueDate, priority, description, recurring, image });
       this.toast('✅ Vazifa yangilandi!');
     } else {
-      this.data.tasks.push({ id: this.uid(), title, subjectId, dueDate, priority, description, completed: false, createdAt: Date.now() });
-      this.toast('✅ Vazifa qo\'shildi!');
+      this.data.tasks.push({ id: this.uid(), title, subjectId, dueDate, priority, description, recurring, image, completed: false, completedDates: [], createdAt: Date.now() });
+      this.toast(recurring !== 'none' ? '✅ Takrorlanuvchi vazifa qo\'shildi!' : '✅ Vazifa qo\'shildi!');
     }
+    this.currentTaskImage = null;
     this.editingTaskId = null;
     this.save();
     this.closeModal('task');
@@ -1316,6 +1873,66 @@ const App = {
     document.getElementById('subjectName').value = '';
   },
 
+  // ------------------------------------------
+  // IMAGE UPLOAD
+  // ------------------------------------------
+  handleImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      this.toast('⚠️ Rasm hajmi 2 MB dan kichik bo\'lishi kerak');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      // Compress image using canvas
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 800;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = height * maxDim / width; width = maxDim; }
+          else { width = width * maxDim / height; height = maxDim; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        this.currentTaskImage = dataUrl;
+        this.updateImagePreview(dataUrl);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  },
+
+  updateImagePreview(dataUrl) {
+    const preview = document.getElementById('taskImagePreview');
+    if (!dataUrl) {
+      preview.className = 'image-preview-empty';
+      preview.innerHTML = '<span>📷</span><p>Rasm tanlash yoki kameradan olish</p>';
+      preview.onclick = () => document.getElementById('taskImageInput').click();
+      this.currentTaskImage = null;
+      document.getElementById('taskImageInput').value = '';
+    } else {
+      preview.className = 'image-preview-filled';
+      preview.innerHTML = `<img src="${dataUrl}" alt="Task image" />
+        <button class="remove-img-btn" onclick="event.stopPropagation();App.updateImagePreview(null)">✕</button>`;
+      preview.onclick = () => this.openImageViewer(dataUrl);
+    }
+  },
+
+  openImageViewer(src) {
+    document.getElementById('imageViewerImg').src = src;
+    document.getElementById('imageViewer').classList.add('open');
+  },
+
+  closeImageViewer() {
+    document.getElementById('imageViewer').classList.remove('open');
+  },
+
   selectEmoji(el) {
     document.querySelectorAll('.emoji-opt').forEach(e => e.classList.remove('active'));
     el.classList.add('active');
@@ -1336,7 +1953,13 @@ const App = {
   },
 
   deleteTask(id) {
-    this.data.tasks = this.data.tasks.filter(t => t.id !== id);
+    if (id.includes('__')) {
+      if (!confirm('Bu takrorlanuvchi vazifaning barcha takrorlanishlarini o\'chirmoqchimisiz?')) return;
+      const origId = id.split('__')[0];
+      this.data.tasks = this.data.tasks.filter(t => t.id !== origId);
+    } else {
+      this.data.tasks = this.data.tasks.filter(t => t.id !== id);
+    }
     this.save();
     this.renderToday();
     this.renderTomorrow();
@@ -1373,6 +1996,24 @@ const App = {
   },
 
   toggleTask(id) {
+    // Recurring instance? id format: "originalId__YYYY-MM-DD"
+    if (id.includes('__')) {
+      const [origId, date] = id.split('__');
+      const task = this.data.tasks.find(t => t.id === origId);
+      if (!task) return;
+      if (!task.completedDates) task.completedDates = [];
+      const idx = task.completedDates.indexOf(date);
+      if (idx === -1) task.completedDates.push(date);
+      else task.completedDates.splice(idx, 1);
+      this.save();
+      this.renderToday(); this.renderTomorrow();
+      if (this.currentPage === 'subjects') this.renderSubjectsPage();
+      if (idx === -1) {
+        this.toast('✅ Bajarildi!');
+        this.checkAllTasksDone();
+      }
+      return;
+    }
     const task = this.data.tasks.find(t => t.id === id);
     if (!task) return;
     task.completed = !task.completed;
@@ -1382,19 +2023,172 @@ const App = {
     if (this.currentPage === 'subjects') this.renderSubjectsPage();
     if (task.completed) {
       this.toast('✅ Vazifa bajarildi!');
-      // Confetti if all today's tasks are done
-      const todayTasks = this.data.tasks.filter(t => t.dueDate === this.dateStr(0));
-      const allDone = todayTasks.length > 0 && todayTasks.every(t => t.completed);
-      if (allDone) {
-        setTimeout(() => this.fireConfetti(), 300);
-        setTimeout(() => this.toast('🎉 Bugungi barcha vazifalar bajarildi!'), 500);
-      }
+      this.checkAllTasksDone();
+    }
+  },
+
+  checkAllTasksDone() {
+    const today = this.dateStr(0);
+    const todayTasks = this.tasksForDate(today);
+    const allDone = todayTasks.length > 0 && todayTasks.every(t => t.completed);
+    if (allDone) {
+      setTimeout(() => this.fireConfetti(), 300);
+      setTimeout(() => this.toast('🎉 Bugungi barcha vazifalar bajarildi!'), 500);
     }
   },
 
   // ------------------------------------------
   // SHARE / EXPORT / IMPORT
   // ------------------------------------------
+  // ------------------------------------------
+  // SHARE: QR / LINK
+  // ------------------------------------------
+  setShareTab(tab) {
+    document.querySelectorAll('.share-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.share-tab-content').forEach(c => c.style.display = 'none');
+    document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById('shareTab-' + tab).style.display = '';
+    if (tab === 'qr') this.generateQR();
+    if (tab === 'link') this.generateShareLink();
+  },
+
+  buildSharePayload() {
+    const includeTasks = document.getElementById('qrIncludeTasks')?.checked;
+    const includeExams = document.getElementById('qrIncludeExams')?.checked;
+    const payload = {
+      v: 1,
+      subjects: this.data.subjects.map(s => ({ id: s.id, n: s.name, c: s.color, i: s.icon })),
+      schedule: this.data.schedule.map(c => ({
+        s: c.subjectId, st: c.startTime, e: c.endTime, r: c.room,
+        t: c.teacher, ct: c.classType, d: c.days,
+      })),
+    };
+    if (includeTasks) {
+      payload.tasks = this.data.tasks.filter(t => !t.image).map(t => ({
+        ti: t.title, s: t.subjectId, dd: t.dueDate, p: t.priority,
+        de: t.description, rec: t.recurring,
+      }));
+    }
+    if (includeExams) {
+      payload.exams = this.data.exams.map(e => ({
+        s: e.subjectId, d: e.date, et: e.examTime, t: e.examType, r: e.room, n: e.notes,
+      }));
+    }
+    return payload;
+  },
+
+  payloadToData(p) {
+    const d = JSON.parse(JSON.stringify(defaultData));
+    d.subjects = (p.subjects || []).map(s => ({ id: s.id, name: s.n, color: s.c, icon: s.i }));
+    d.schedule = (p.schedule || []).map(c => ({
+      id: this.uid(), subjectId: c.s, startTime: c.st, endTime: c.e,
+      room: c.r, teacher: c.t, classType: c.ct, days: c.d,
+    }));
+    d.tasks = (p.tasks || []).map(t => ({
+      id: this.uid(), title: t.ti, subjectId: t.s, dueDate: t.dd, priority: t.p,
+      description: t.de, recurring: t.rec, completed: false, completedDates: [], createdAt: Date.now(),
+    }));
+    d.exams = (p.exams || []).map(e => ({
+      id: this.uid(), subjectId: e.s, date: e.d, examTime: e.et, examType: e.t, room: e.r, notes: e.n,
+    }));
+    return d;
+  },
+
+  encodeShareData() {
+    const payload = this.buildSharePayload();
+    const json = JSON.stringify(payload);
+    return btoa(unescape(encodeURIComponent(json)));
+  },
+
+  decodeShareData(encoded) {
+    try {
+      return JSON.parse(decodeURIComponent(escape(atob(encoded))));
+    } catch {
+      return null;
+    }
+  },
+
+  generateQR() {
+    const canvas = document.getElementById('qrCanvas');
+    if (!canvas || !window.QRCode) return;
+    const url = this.makeShareUrl();
+    QRCode.toCanvas(canvas, url, { width: 240, margin: 1, color: { dark: '#1A1A2E', light: '#FFFFFF' } }, (err) => {
+      if (err) {
+        // Fallback: show text instead
+        canvas.replaceWith(Object.assign(document.createElement('div'), {
+          textContent: 'QR juda katta — ozroq ma\'lumot tanlang',
+          style: 'padding:30px;color:#EF4444;font-size:13px;text-align:center'
+        }));
+      }
+    });
+  },
+
+  makeShareUrl() {
+    const encoded = this.encodeShareData();
+    const base = location.origin + location.pathname.replace(/index\.html?$/, '');
+    return `${base}#share=${encoded}`;
+  },
+
+  generateShareLink() {
+    document.getElementById('shareLinkInput').value = this.makeShareUrl();
+  },
+
+  copyShareLink() {
+    const input = document.getElementById('shareLinkInput');
+    input.select();
+    navigator.clipboard.writeText(input.value).then(() => {
+      this.toast('🔗 Havola nusxalandi!');
+    }).catch(() => {
+      document.execCommand('copy');
+      this.toast('🔗 Havola nusxalandi!');
+    });
+  },
+
+  checkUrlForShare() {
+    const hash = location.hash;
+    if (!hash.startsWith('#share=')) return;
+    const encoded = hash.slice(7);
+    const payload = this.decodeShareData(encoded);
+    if (!payload) {
+      this.toast('❌ Havola yaroqsiz');
+      history.replaceState(null, '', location.pathname);
+      return;
+    }
+    this._pendingImport = payload;
+    const counts = [];
+    counts.push(`${payload.subjects?.length || 0} ta fan`);
+    counts.push(`${payload.schedule?.length || 0} ta dars`);
+    if (payload.tasks?.length) counts.push(`${payload.tasks.length} ta vazifa`);
+    if (payload.exams?.length) counts.push(`${payload.exams.length} ta imtihon`);
+    document.getElementById('importPreview').innerHTML =
+      `Quyidagilar import qilinadi:<br><strong>${counts.join(', ')}</strong>`;
+    document.getElementById('modal-import-url').classList.add('open');
+    history.replaceState(null, '', location.pathname);
+  },
+
+  confirmImportFromUrl(append = false) {
+    const payload = this._pendingImport;
+    if (!payload) return;
+    const newData = this.payloadToData(payload);
+    if (append) {
+      // Merge: add new subjects (avoiding duplicate IDs), schedule, tasks, exams
+      const existingSubIds = new Set(this.data.subjects.map(s => s.id));
+      newData.subjects.forEach(s => { if (!existingSubIds.has(s.id)) this.data.subjects.push(s); });
+      this.data.schedule.push(...newData.schedule);
+      this.data.tasks.push(...newData.tasks);
+      this.data.exams.push(...newData.exams);
+    } else {
+      this.data = { ...this.data, subjects: newData.subjects, schedule: newData.schedule, tasks: newData.tasks, exams: newData.exams };
+    }
+    this.save();
+    this.populateSubjectSelects();
+    this.renderToday(); this.renderTomorrow();
+    this.closeModal('import-url');
+    this._pendingImport = null;
+    this.toast('✅ Jadval qabul qilindi!');
+    this.fireConfetti();
+  },
+
   exportData() {
     const json = JSON.stringify(this.data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
@@ -1553,80 +2347,6 @@ const App = {
 
     // Schedule notifications for today's classes on load
     setTimeout(() => this.scheduleClassNotifications(), 1000);
-
-    // ---- Capacitor native integrations ----
-    this.initCapacitor();
-  },
-
-  // ------------------------------------------
-  // CAPACITOR NATIVE BRIDGE
-  // ------------------------------------------
-  initCapacitor() {
-    if (!window.Capacitor) return;
-
-    // Android orqa tugmasi
-    document.addEventListener('ionBackButton', (ev) => {
-      ev.detail.register(10, () => {
-        const openModal = document.querySelector('.modal-overlay.open');
-        if (openModal) {
-          const id = openModal.id.replace('modal-', '');
-          this.closeModal(id);
-          return;
-        }
-        if (this.currentPage !== 'today') {
-          this.navigate('today');
-          return;
-        }
-        // Ikki marta bosilsa chiqish so'raladi
-        if (this._backPressedOnce) {
-          if (window.Capacitor.Plugins?.App) {
-            window.Capacitor.Plugins.App.exitApp();
-          }
-        } else {
-          this._backPressedOnce = true;
-          this.toast('Chiqish uchun yana bir marta bosing');
-          setTimeout(() => { this._backPressedOnce = false; }, 2000);
-        }
-      });
-    });
-
-    // Status bar rangini o'rnatish
-    if (window.Capacitor.Plugins?.StatusBar) {
-      const { StatusBar } = window.Capacitor.Plugins;
-      StatusBar.setStyle({ style: 'LIGHT' });
-      StatusBar.setBackgroundColor({ color: '#6C63FF' });
-    }
-
-    // Splash screeni yashirish
-    if (window.Capacitor.Plugins?.SplashScreen) {
-      window.Capacitor.Plugins.SplashScreen.hide({ fadeOutDuration: 500 });
-    }
-
-    // Keyboard pushup
-    if (window.Capacitor.Plugins?.Keyboard) {
-      const { Keyboard } = window.Capacitor.Plugins;
-      Keyboard.addListener('keyboardWillShow', (info) => {
-        document.body.style.paddingBottom = info.keyboardHeight + 'px';
-      });
-      Keyboard.addListener('keyboardWillHide', () => {
-        document.body.style.paddingBottom = '';
-      });
-    }
-
-    // App foreground/background
-    if (window.Capacitor.Plugins?.App) {
-      window.Capacitor.Plugins.App.addListener('appStateChange', ({ isActive }) => {
-        if (isActive) {
-          this.updateHeader();
-          this.startClock();
-          if (this.currentPage === 'today') this.renderToday();
-        } else {
-          clearInterval(this.clockInterval);
-        }
-      });
-    }
-
-    console.log('✅ Capacitor native bridge initialized');
   },
 };
 
